@@ -90,6 +90,8 @@ public:
     void PrintSolution();
 
     int GetTourLength(std::string whichAlgorithm);
+
+    unsigned int numberOfThreads;
 };
 
 

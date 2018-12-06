@@ -3,15 +3,18 @@
 //
 
 #include "TravellingSalesmanProblem.h"
+#include "ThreadPool.h"
 #include <stack>
 #include <random>
+#include <mutex>
 
 Subset::Subset() : isK1(true), parent(INT_MIN) {
 }
 
 TravellingSalesmanProblem::TravellingSalesmanProblem() : amountOfCities(0), arrayOfMatrixOfCities(nullptr),
                                                          optimalWay_BruteForceAlgorithmSolution(nullptr),
-                                                         upperBound(INT_MAX), allPossiblePermutations(nullptr) {
+                                                         upperBound(INT_MAX), allPossiblePermutations(nullptr),
+                                                         numberOfThreads(100) {
 }
 
 TravellingSalesmanProblem::~TravellingSalesmanProblem() {
@@ -393,8 +396,7 @@ void TravellingSalesmanProblem::EliminationOfSubtour(std::vector<std::vector<int
                 subtour.push_front(_route.first);
                 found = true;
                 break;
-            }
-            else if (_route.first == subtour.back()) {
+            } else if (_route.first == subtour.back()) {
                 subtour.push_back(_route.first);
                 subtour.push_back(_route.second);
                 found = true;
@@ -405,7 +407,10 @@ void TravellingSalesmanProblem::EliminationOfSubtour(std::vector<std::vector<int
 
     std::pair<int, int> positionOfMatrixCell;
     int foundsPositionIndexes = 0;
-    for (int i = 1; i < activeMatrix.size(); i++) {
+
+    std::mutex critical;
+    ThreadPool::ParallelFor(1, static_cast<int>(activeMatrix.size()), [&](int i) {
+        std::lock_guard<std::mutex> lock(critical);
         if (activeMatrix[i][0] == subtour.back()) {
             positionOfMatrixCell.first = i;
             foundsPositionIndexes++;
@@ -414,7 +419,8 @@ void TravellingSalesmanProblem::EliminationOfSubtour(std::vector<std::vector<int
             positionOfMatrixCell.second = i;
             foundsPositionIndexes++;
         }
-    }
+    }, numberOfThreads);
+
 
     if (foundsPositionIndexes == 2) {
         activeMatrix[positionOfMatrixCell.first][positionOfMatrixCell.second] = INT_MAX;
@@ -529,14 +535,18 @@ TravellingSalesmanProblem::SubtractMinimalValuesFromTheColumns(std::vector<std::
 // ---------------------------------------------------------------------------------------------------------
 int TravellingSalesmanProblem::StandarizationOfMatrix(std::vector<std::vector<int>> &activeMatrix) {
     int minRowTotal = 0;
-    for (int i = 1; i < activeMatrix.size(); i++) {
+
+    std::mutex critical;
+    ThreadPool::ParallelFor(1, static_cast<int>(activeMatrix.size()), [&](int i) {
+        std::lock_guard<std::mutex> lock(critical);
         minRowTotal += SubtractMinimalValuesFromTheRows(activeMatrix, i);
-    }
+    }, numberOfThreads);
 
     int minColTotal = 0;
-    for (int i = 1; i < activeMatrix.size(); i++) {
+    ThreadPool::ParallelFor(1, static_cast<int>(activeMatrix.size()), [&](int i) {
+        std::lock_guard<std::mutex> lock(critical);
         minColTotal += SubtractMinimalValuesFromTheColumns(activeMatrix, i);
-    }
+    }, numberOfThreads);
 
     return minRowTotal + minColTotal;
 }
@@ -598,10 +608,12 @@ void TravellingSalesmanProblem::MatrixShortening(std::vector<std::vector<int>> &
     auto it_row = activeMatrix.begin() + row;
     activeMatrix.erase(it_row);
 
-    for (int i = 0; i < activeMatrix.size(); i++) {
+    std::mutex critical;
+    ThreadPool::ParallelFor(0, static_cast<int>(activeMatrix.size()), [&](int i) {
+        std::lock_guard<std::mutex> lock(critical);
         auto it_col = activeMatrix[i].begin() + col;
         activeMatrix[i].erase(it_col);
-    }
+    }, numberOfThreads);
 }
 
 void TravellingSalesmanProblem::PrintSolution() {
